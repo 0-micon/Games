@@ -7,6 +7,27 @@ const CARD_NUM = SUIT_NUM * RANK_NUM;
 
 // Cards:
 // Card index is defined as: suit + rank * SUIT_NUM
+function indexToCard(index) {
+    if (index == undefined) {
+        return '--';
+    } else {
+        let suit = index % SUIT_NUM;
+        let rank = Math.floor(index / SUIT_NUM);
+        return '' + RANKS[rank % RANK_NUM] + SUITS[suit];
+    }
+}
+
+function cardsToString(array) {
+    let buf = '[';
+    let prefix = '';
+    for (let i = 0; i < array.length; i++) {
+        buf += prefix + indexToCard(array[i]);
+        prefix = ',';
+    }
+    buf += ']';
+    return buf;
+}
+
 function Desk(pileNum, cellNum, baseNum) {
     this.piles = [];
     for (let i = 0; i < pileNum; i++) {
@@ -18,7 +39,16 @@ function Desk(pileNum, cellNum, baseNum) {
 }
 
 Desk.prototype.toString = function () {
-    return JSON.stringify(this);
+    let buf = 'bases: ' + cardsToString(this.bases)
+        + ' cells: ' + cardsToString(this.cells)
+        + ' piles: [';
+    let prefix = '';
+    for (let i = 0; i < this.piles.length; i++) {
+        buf += prefix + cardsToString(this.piles[i]);
+        prefix = ',';
+    }
+    buf += ']';
+    return buf;
 };
 
 Desk.prototype.toJSON = function () {
@@ -56,6 +86,7 @@ Desk.prototype.deal = function (number) {
         while (done[card]) {
             card = (card + 1) % CARD_NUM;
         }
+        done[card] = true;
         this.piles[i % this.piles.length].push(card);
     }
 };
