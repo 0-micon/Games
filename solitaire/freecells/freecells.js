@@ -8,11 +8,11 @@ const CARD_NUM = SUIT_NUM * RANK_NUM;
 // Cards:
 // Card index is defined as: suit + rank * SUIT_NUM
 function indexToCard(index) {
-    if (index == undefined) {
+    if (index < 0) {
         return '--';
     } else {
-        let suit = index % SUIT_NUM;
-        let rank = Math.floor(index / SUIT_NUM);
+        const suit = index % SUIT_NUM;
+        const rank = Math.floor(index / SUIT_NUM);
         return '' + RANKS[rank % RANK_NUM] + SUITS[suit];
     }
 }
@@ -36,7 +36,40 @@ function Desk(pileNum, cellNum, baseNum) {
 
     this.cells = new Array(cellNum);
     this.bases = new Array(baseNum);
+    this.clear();
 }
+
+Desk.prototype.getCellIndex = function () {
+    for (let i = 0; i < this.cells.length; i++) {
+        if (this.cells[i] < 0) {
+            return i;
+        }
+    }
+    return -1;
+};
+
+Desk.prototype.getBaseIndex = function (card) {
+    const suit = card % SUIT_NUM;
+    const rank = Math.floor(card / SUIT_NUM);
+    for (let i = suit; i < this.bases.length; i += suit) {
+        if (rank - this.bases[i] == 1) {
+            return i;
+        }
+    }
+    return -1;
+};
+
+Desk.prototype.toMove = function (source, destination) {
+    return source * (this.piles.length + 2) + destination;
+};
+
+Desk.prototype.toCell = function (source) {
+    return this.toMove(source, this.piles.length + 0);
+};
+
+Desk.prototype.toBase = function (source) {
+    return this.toMove(source, this.piles.length + 1);
+};
 
 Desk.prototype.toString = function () {
     let buf = 'bases: ' + cardsToString(this.bases)
@@ -65,8 +98,8 @@ Desk.prototype.clear = function () {
         this.piles[i].length = 0;
     }
 
-    this.cells.length = 0;
-    this.bases.length = 0;
+    this.cells.fill(-1);
+    this.bases.fill(-1);
 };
 
 Desk.prototype.deal = function (number) {
@@ -89,4 +122,10 @@ Desk.prototype.deal = function (number) {
         done[card] = true;
         this.piles[i % this.piles.length].push(card);
     }
+};
+
+Desk.prototype.getMoves = function () {
+    const moves = [];
+
+    return moves;
 };
