@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title></title>
+    <meta charset="utf-8" />
+    <style>
+#m_game {
+    /*font-size: larger;*/
+    /*font-family: 'Lucida Console', Monaco, monospace;*/
+}
+
+.placeholder {
+    background-color:grey;
+}
+.pile {
+    background-color:blue;
+}
+.base {
+    background-color:darkblue;
+}
+.cell {
+    border: 1px blanchedalmond solid;
+}
+
+.card {
+    /*opacity: 0.85;*/
+
+    transition-property: left, top;
+    transition-duration: 1s, 1s;
+    transition-timing-function: ease-out, ease-out;
+
+    background-image:url('resources/svg/cards/foreground.svg');
+    background-size: 100% 100%; 
+    background-repeat:no-repeat;
+    display: inline-block;
+            
+    border: 2px solid darkgray;
+    border-radius: 8px;
+
+    vertical-align: middle;
+    /*padding: 1em;*/
+
+    /* to prevent selection */
+    -webkit-user-select: none;  /* Chrome all / Safari all */
+    -moz-user-select: none;     /* Firefox all */
+    -ms-user-select: none;      /* IE 10+ */
+    user-select: none;          /* Likely future */
+}
+
+section {
+    border:dotted 1px red;
+}
+.diamonds, .hearts {
+    color:red;
+}
+.spades, .clubs {
+    color:black;
+}
+.playable {
+    border: 2px red solid;
+}
+.selected {
+    border: 2px green solid;
+}
+.card.selected {
+    opacity: 0.95;
+}
+
+    </style>
+</head>
+<body>
+    <section id="m_game">
+        <!--<section id="m_cells"></section>
+        <section id="m_bases"></section>
+        <section id="m_piles"></section>-->
+    </section>
+    <button id="m_deal">Deal</button>
+    <button id="m_auto">Auto</button>
+    <button id="m_undo" disabled>Undo</button>
+    <button id="m_redo" disabled>Redo</button>
+    <ol id="m_history">History:</ol>
+
+    <script src="Scripts/utils.js"></script>
+    <script src="Scripts/cards.js"></script>
+    <script src="Scripts/freecells.js"></script>
+    <script>
+        const UNITS = "em";
+        /*
+         * The most common sizes:
+         * 1. poker size (2.5 × 3.5 inches (64 × 89 mm);
+         * 2. bridge size (2.25 × 3.5 inches (57 × 89 mm);
+         */
+        const CX = 2.5,
+          CY = 3.5,
+          DX = 0.25 * CX,
+          DY = 0.25 * CY,
+          PLAY_CX = 2 * CX + Math.max(CELL_NUM + BASE_NUM, PILE_NUM) * (CX + DX),
+          PLAY_CY = 9 * CY,
+          CELL_X = CX,
+          CELL_Y = CY,
+          BASE_X = CELL_X + CELL_NUM * (CX + DX),
+          BASE_Y = CELL_Y,
+          PILE_X = CELL_X,
+          PILE_Y = CELL_Y + CY + DY;
+
+        m_game.style.position = "relative";
+        m_game.style.top = 0;
+        m_game.style.left = 0;
+        m_game.style.width = PLAY_CX + UNITS;
+        m_game.style.height = PLAY_CY + UNITS;
+
+        // Create placeholders:
+        const placeholders = new Array(DESK_SIZE);
+        for (let i = 0; i < DESK_SIZE; i++) {
+            const element = (placeholders[i] = document.createElement("div"));
+            element.style.position = "absolute";
+            element.style.width = CX + UNITS;
+            element.style.height = CY + UNITS;
+            element.style.zIndex = 0;
+            element.classList.add("placeholder");
+
+            m_game.appendChild(element);
+        }
+
+        for (let i = CELL_START; i < CELL_END; i++) {
+            const element = placeholders[i];
+            element.classList.add("cell");
+            element.style.top = CELL_Y + UNITS;
+            element.style.left = CELL_X + (i - CELL_START) * (CX + DX) + UNITS;
+        }
+
+        for (let i = BASE_START; i < BASE_END; i++) {
+            const index = i - BASE_START;
+            const element = placeholders[i];
+            element.classList.add("base");
+            element.classList.add(Cards.suitFullNameOf(index));
+            element.style.top = BASE_Y + UNITS;
+            element.style.left = BASE_X + index * (CX + DX) + UNITS;
+            element.innerHTML = Cards.suitHTMLCodeOf(index);
+        }
+
+        for (let i = PILE_START; i < PILE_END; i++) {
+            const element = placeholders[i];
+            element.classList.add("pile");
+            element.style.top = PILE_Y + UNITS;
+            element.style.left = PILE_X + (i - PILE_START) * (CX + DX) + UNITS;
+        }
+
+
+        // Create cards:
+        const cards = new Array(Cards.CARD_NUM);
+        for (let i = 0; i < Cards.CARD_NUM; i++) {
+            //const r = Cards.rank(i);
+            //const s = Cards.suit(i);
+
+            const element = document.createElement('div');
+            element.classList.add('card');
+            element.classList.add(Cards.suitFullNameOf(i));
+            element.id = 'm_card_' + i;
+            element.innerHTML = Cards.rankPlayNameOf(i) + Cards.suitHTMLCodeOf(i);
+            element.style.position = 'absolute';
+            element.style.left = 0;
+            element.style.top = 0;
+            element.style.width = CX + UNITS;
+            element.style.height = CY + UNITS;
+            //element.setAttribute('draggable', 'true');
+
+            m_game.appendChild(element);
+            cards[i] = element;
+        }
+
+        const desk = new Desk();
+        const selector = newSingleElementSelector('selected');
+        const history = newHistory();
+        const historySelector = newSingleElementSelector('selected');
+
+        history.onclear = function () {
+            historySelector.clear();
+            m_history.innerHTML = '';
+            m_undo.setAttribute('disabled', 'disabled');
+            m_redo.setAttribute('disabled', 'disabled');
+        };
+        history.onadd = function () {
+            m_undo.removeAttribute('disabled');
+
+            const index = history.current;
+            const item = history.currentItem;
+            const li = document.createElement('li');
+            let from = to = '-1';
+            if (item.to >= PILE_START && item.to < PILE_END) {
+                to = 'pile #' + (item.to - PILE_START);
+            }
+            if (item.from >= PILE_START && item.from < PILE_END) {
+                from = 'pile #' + (item.from - PILE_START);
+            }
+            if (item.to >= BASE_START && item.to < BASE_END) {
+                to = 'base #' + (item.to - BASE_START);
+            }
+            if (item.from >= BASE_START && item.from < BASE_END) {
+                from = 'base #' + (item.from - BASE_START);
+            }
+            if (item.to >= CELL_START && item.to < CELL_END) {
+                to = 'cell #' + (item.to - CELL_START);
+            }
+            if (item.from >= CELL_START && item.from < CELL_END) {
+                from = 'cell #' + (item.from - CELL_START);
+            }
+
+            //li.classList.add(Cards.suitFullNameOf(item.card));
+            li.innerHTML = '<span class="' + Cards.suitFullNameOf(item.card) + '">' + Cards.playNameOf(item.card) + '</span>'
+                + ': ' + from + ' &rarr; ' + to;
+            li.onclick = function () {
+                // move forward
+                while (history.current < index) {
+                    const next = history.forwardItem;
+
+                    desk.moveCard(next.from * DESK_SIZE + next.to);
+                    //desk.moves = desk.getMoves();
+                }
+
+                // move backward
+                while (history.current > index) {
+                    const prev = history.currentItem;
+
+                    desk.moveCard(prev.to * DESK_SIZE + prev.from);
+                    //desk.moves = desk.getMoves();
+                }
+            };
+
+            const children = m_history.querySelectorAll('li');
+            for (let i = children.length; i >= history.length; i--) {
+                m_history.removeChild(children[i - 1]);
+            }
+            m_history.appendChild(li);
+            historySelector.select(li, history.current);
+        };
+        history.onmove = function () {
+            const children = m_history.querySelectorAll('li');
+            historySelector.select(children[history.current], history.current);
+
+            if (history.current >= 0) {
+                m_undo.removeAttribute('disabled');
+            } else {
+                m_undo.setAttribute('disabled', 'disabled');
+            }
+
+            if (history.total > history.length) {
+                m_redo.removeAttribute('disabled');
+            } else {
+                m_redo.setAttribute('disabled', 'disabled');
+            }
+        };
+
+        m_undo.onclick = function () {
+            if (history.current >= 0) {
+                const item = history.currentItem;
+                desk.moveCard(item.to * DESK_SIZE + item.from);
+                //desk.moves = desk.getMoves();
+            }
+        };
+
+        m_redo.onclick = function () {
+            if (history.total > history.length) {
+                const next = history.forwardItem;
+
+                desk.moveCard(next.from * DESK_SIZE + next.to);
+                //desk.moves = desk.getMoves();
+            }
+        };
+
+        //function unselect() {
+        //    if (desk.selectedElement) {
+        //        desk.selectedElement.classList.remove('selected');
+        //    }
+        //    desk.selectedSource = -1;
+        //}
+
+        //function select(element, index) {
+        //    unselect();
+        //    desk.selectedSource = index;
+        //    desk.selectedElement = element;
+        //    element.classList.add('selected');
+        //}
+
+        function addPlayable(element, index) {
+            element.classList.add('playable');
+            element.onclick = function () {
+                if (!selector.isSelection) {
+                    selector.select(element, index);
+                } else if (selector.data != index) {
+                    const move = selector.data * DESK_SIZE + index;
+                    if (desk.moves.indexOf(move) >= 0) {
+                        desk.moveCard(move);
+                    } else {
+                        selector.select(element, index);
+                    }
+                }
+            };
+
+            element.ondblclick = function () {
+                let bestMove = -1;
+                for (let i = 0; i < desk.moves.length; i++) {
+                    const move = desk.moves[i];
+                    if (Math.floor(move / DESK_SIZE) == index) {
+                        const destinationA = move % DESK_SIZE;
+                        if (destinationA >= BASE_START && destinationA < BASE_END) {
+                            bestMove = move;    // Move the card to the base.
+                            break;
+                        }
+                        if (bestMove < 0) {
+                            bestMove = move;
+                        } else {
+                            const destinationB = bestMove % DESK_SIZE;
+                            if (desk.pileAt(destinationA).length > desk.pileAt(destinationB).length) {
+                                bestMove = move;    // Move the card to the longest pile. It's usually the best choice ;-).
+                            }
+                        }
+                    }
+                }
+                if (bestMove >= 0) {
+                    desk.moveCard(bestMove);
+                }
+            };
+        }
+
+        function removePlayable(element) {
+            element.classList.remove('playable');
+            element.onclick = null;
+            element.ondblclick = null;
+        }
+
+        desk.zIndex = 0;
+        desk.onmove = function (card, src, dst) {
+            selector.unselect(); // remove selection if any.
+
+            let historyUpdated = false;
+            if (history.length > 0) {
+                const item = history.currentItem;
+                if (item.card == card && item.from == dst && item.to == src) {
+                    history.moveBackward();
+                    historyUpdated = true;
+                }
+            }
+            if (!historyUpdated && history.total > history.length) {
+                const item = history.forwardItem;
+                if (item.card == card && item.from == src && item.to == dst) {
+                    history.moveForward();
+                    historyUpdated = true;
+                }
+            }
+            if (!historyUpdated) {
+                history.add({ card: card, from: src, to: dst });
+            }
+
+            const pile = desk.pileAt(dst);
+            const element = cards[card];
+            element.style.zIndex = ++desk.zIndex;
+
+            if (dst >= PILE_START && dst < PILE_END) {
+                element.style.left = PILE_X + dst * (CX + DX) + UNITS;
+                element.style.top = PILE_Y + (pile.length - 1) * DY + UNITS;
+            } else {
+                element.style.left = placeholders[dst].style.left;
+                element.style.top = placeholders[dst].style.top;
+            }
+            
+            
+            // Disable the placeholder or the previous card in the pile.
+            removePlayable(pile.length == 1 ? placeholders[dst] : cards[pile[pile.length - 2]]);
+            addPlayable(element, dst);
+
+            if (src >= 0) {
+                const prev = desk.pileAt(src);
+                // Enable the placeholder or the previous card in the pile.
+                addPlayable(prev.length == 0 ? placeholders[src] : cards[prev[prev.length - 1]], src);
+
+                desk.moves = desk.getMoves();
+            }
+        };
+
+        m_deal.onclick = function () {
+            history.lock();
+            desk.zIndex = 0;
+            desk.deal(Math.floor(Math.random() * Math.pow(2, 31)));
+            desk.moves = desk.getMoves();
+            history.clear();
+
+            for (let i = 0; i < DESK_SIZE; i++) {
+                if (desk.pileAt(i).length == 0) {
+                    addPlayable(placeholders[i], i);
+                }
+            }
+        }
+
+        m_auto.onclick = function () {
+            for (let i = 0; i < desk.moves.length; i++) {
+                const move = desk.moves[i];
+                const dst = move % DESK_SIZE;
+                if (dst >= BASE_START && dst < BASE_END) {
+                    desk.moveCard(move);
+                    //desk.moves = desk.getMoves();
+                    setTimeout(arguments.callee, 250);
+                    break;
+                }
+            }
+        };
+        
+
+        //const UNITS = 'px';
+        //const CX = 64, CY = 64;
+        //const CELLS_X = 10, CELLS_Y = 10;
+        //const PILES_X = 10, PILES_Y = 100;
+
+        //const suits = ['&spades;', '&diams;', '&clubs;', '&hearts;'];
+        //const names = ['spades', 'diamonds', 'clubs', 'hearts'];
+        //const game = new Desk();
+        //const cells = new Array(CELL_NUM);
+        //const cards = new Array(CARD_NUM);
+
+        //// Create empty cell elements:
+        //for (let i = 0; i < CELL_NUM; i++) {
+        //    const element = document.createElement('div');
+        //    element.classList.add('cell');
+        //    element.style.position = 'absolute';
+        //    element.style.left = CELLS_X + 1.25 * i * CX + UNITS;
+        //    element.style.top = CELLS_Y + UNITS;
+        //    element.style.width = CX + UNITS;
+        //    element.style.height = CY + UNITS;
+        //    element.style.zIndex = 1;
+        //    element.onclick = function (event) {
+        //        const index = CELL_START + i;
+        //        // Check if the cell is empty
+        //        if (game.desk[index].length == 0 && game.selectedCard >= 0) {
+        //            game.moveCard(game.selectedCard * DESK_SIZE + index);
+
+        //            //const cardElement = 
+        //        }
+        //    };
+
+        //    m_game.appendChild(element);
+        //    cells[i] = element;
+        //}
+
+        //// Create cards:
+        //for (let i = 0; i < CARD_NUM; i++) {
+        //    const r = Cards.rank(i);
+        //    const s = Cards.suit(i);
+
+        //    const element = document.createElement('div');
+        //    element.classList.add('card');
+        //    element.classList.add(names[s]);
+        //    element.id = 'm_card_' + i;
+        //    element.innerHTML = RANKS[r] + suits[s];
+        //    element.style.position = 'absolute';
+        //    element.style.width = CX + UNITS;
+        //    element.style.height = CY + UNITS;
+        //    //element.setAttribute('draggable', 'true');
+
+        //    m_game.appendChild(element);
+        //    cards[i] = element;
+        //}
+        
+        //game.deal(0);
+
+        //let z = 1;
+        //for (let i = PILE_START; i < PILE_END; i++) {
+        //    const pile = game.desk[i];
+        //    for (let j = 0; j < pile.length; j++) {
+        //        const c = pile[j];
+        //        const element = cards[c];
+        //        element.style.left = PILES_X + 1.25 * i * CX + UNITS;
+        //        element.style.top = PILES_Y + 0.5 * j * CY + UNITS;
+        //        element.style.zIndex = z;
+        //        z++;
+        //    }
+        //}
+
+        //const moves = game.getMoves();
+        //game.selectedCard = -1;
+
+        //for (let i = 0; i < moves.length; i++) {
+        //    const src = Math.floor(moves[i] / DESK_SIZE);
+        //    const dst = moves[i] % DESK_SIZE;
+
+        //    const p = game.desk[src]
+        //    const c = p[p.length - 1];
+        //    const element = cards[c];
+        //    element.classList.add('playable');
+        //    element.onclick = function (event) {
+        //        console.log(this.id + ' was clicked!');
+        //        if (game.selectedCard >= 0) {
+        //            cards[game.selectedCard].classList.remove('selected');
+        //        }
+        //        game.selectedCard = c;
+        //        if (game.selectedCard >= 0) {
+        //            cards[game.selectedCard].classList.add('selected');
+        //        }
+        //    };
+        //}
+
+        //for (let i = PILE_START; i < PILE_END; i++) {
+        //    const pileElement = document.createElement('section');
+        //    pileElement.id = 'm_pile_' + i;
+        //    pileElement.classList.add('pile');
+        //    pileElement.style.position = 'relative';
+
+        //    const pile = game.desk[i];
+        //    for (let j = 0; j < pile.length; j++) {
+        //        const cardName = Cards.nameOf(pile[j]);
+        //        const cardElement = document.createElement('img');
+        //        cardElement.id = 'm_card_' + cardName;
+        //        cardElement.classList.add('card');
+        //        cardElement.setAttribute('src', 'resources/svg/cards/' + cardName + '.svg');
+        //        cardElement.setAttribute('alt', cardName);
+        //        if (j + 1 == pile.length) {
+        //            cardElement.classList.add('draggable');
+        //            cardElement.setAttribute('draggable', 'true');
+        //        } else {
+        //            cardElement.setAttribute('draggable', 'false');
+        //        }
+        //        cardElement.style.position = 'absolute';
+        //        cardElement.style.left = '4px';
+        //        cardElement.style.top = 20 * j + 'px';
+
+        //        pileElement.appendChild(cardElement);
+        //    }
+            
+        //    m_piles.appendChild(pileElement);
+        //}
+    </script>
+
+</body>
+</html>
