@@ -323,7 +323,46 @@ section {
             element.ondblclick = null;
         }
 
-        game.zIndex = 0;
+        game.ondeal = function (deck) {
+            // reset selection and history
+            selector.unselect();
+            history.clear();
+
+            for (let i = 0; i < game.CARD_NUM; i++) {
+                const element = cards[deck[i]];
+                element.style.zIndex = i;
+                removePlayable(element);
+            }
+
+            for (let i = 0; i < game.DESK_SIZE; i++) {
+                const count = game.numberOfCardsAt(i);
+                if (count > 0) {
+                    removePlayable(placeholders[i]);
+                    addPlayable(cards[game.cardAt(i, count - 1)], i);
+
+                    for (let j = 0; j < count; j++) {
+                        const element = cards[game.cardAt(i, j)];
+                        if (game.isPile(i)) {
+                            element.style.left = placeholders[i].style.left;
+                            element.style.top = parseFloat(placeholders[i].style.top) + j * DY + UNITS;
+                        } else {
+                            element.style.left = placeholders[i].style.left;
+                            element.style.top = placeholders[i].style.top;
+                        }
+                    }
+                } else {
+                    addPlayable(placeholders[i], i);
+                }
+            }
+
+            m_auto.setAttribute('disabled', 'disabled');
+            game.forEachMove(function (source, destination) {
+                if (game.isBase(destination)) {
+                    m_auto.removeAttribute('disabled');
+                    return true;
+                }
+            });
+        };
         game.onmove = function (card, src, dst) {
             selector.unselect(); // remove selection if any.
 
@@ -347,7 +386,13 @@ section {
             }
 
             const element = cards[card];
-            element.style.zIndex = ++game.zIndex;
+            // zIndex update.
+            cards.forEach(function(item, index) {
+                if (item.style.zIndex > element.style.zIndex) {
+                    item.style.zIndex = item.style.zIndex - 1;
+                }
+            });
+            element.style.zIndex = cards.length;
 
             const dstCards = game.numberOfCardsAt(dst);
 
@@ -363,11 +408,9 @@ section {
             removePlayable(dstCards <= 1 ? placeholders[dst] : cards[game.cardAt(dst, dstCards - 2)]);
             addPlayable(element, dst);
 
-            if (src >= 0) {
-                const srcCards = game.numberOfCardsAt(src);
-                // Enable the placeholder or the previous card in the pile.
-                addPlayable(srcCards == 0 ? placeholders[src] : cards[game.cardAt(src, srcCards - 1)], src);
-            }
+            const srcCards = game.numberOfCardsAt(src);
+            // Enable the placeholder or the previous card in the pile.
+            addPlayable(srcCards == 0 ? placeholders[src] : cards[game.cardAt(src, srcCards - 1)], src);
 
             m_auto.setAttribute('disabled', 'disabled');
             game.forEachMove(function (source, destination) {
@@ -379,24 +422,7 @@ section {
         };
 
         m_deal.onclick = function () {
-            history.lock();
-            game.zIndex = 0;
             game.deal(Math.floor(Math.random() * Math.pow(2, 31)));
-            history.clear();    // clear history and remove lock
-
-            for (let i = 0; i < game.DESK_SIZE; i++) {
-                if (game.numberOfCardsAt(i) == 0) {
-                    addPlayable(placeholders[i], i);
-                }
-            }
-
-            m_auto.setAttribute('disabled', 'disabled');
-            game.forEachMove(function (source, destination) {
-                if (game.isBase(destination)) {
-                    m_auto.removeAttribute('disabled');
-                    return true;
-                }
-            });
         }
 
         m_auto.onclick = function onclick() {
