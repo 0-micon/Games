@@ -1,3 +1,4 @@
+
 function newGame(pileNum, cellNum, baseNum) {
     const RANK_NUM = Cards.RANK_NUM;
     const SUIT_NUM = Cards.SUIT_NUM;
@@ -117,30 +118,16 @@ function newGame(pileNum, cellNum, baseNum) {
 
     function deal(number) {
         clear();
+        const cards = Cards.deck(number);
 
-        // use LCG algorithm to pick up cards from the deck
-        // http://en.wikipedia.org/wiki/Linear_congruential_generator
-        const m = Math.pow(2, 31);
-        const a = 1103515245;
-        const c = 12345;
-
-        const done = {};
-        for (let i = 0; i < CARD_NUM; i++) {
-            number = (a * number + c) % m;
-
-            let card = number % CARD_NUM;
-            while (done[card]) {
-                card = (card + 1) % CARD_NUM;
-            }
-            done[card] = true;
-            const dst = PILE_START + (i % PILE_NUM);
-            desk[dst].push(card);
-            if (this.onmove) {
-                this.onmove(card, -1, dst);
-            }
+        for (let i = 0; i < cards.length; i++) {
+            desk[PILE_START + (i % PILE_NUM)].push(cards[i]);
         }
 
         getMoves();
+        if (this.ondeal) {
+            this.ondeal(cards);
+        }
     }
 
     function moveCard(source, destination) {
