@@ -298,15 +298,22 @@ section {
                 let bestDestination = -1;
                 game.forEachMove(function(source, destination) {
                     if (index == source) {
-                        if (destination >= game.BASE_START && destination < game.BASE_END) {
+                        if (this.isBase(destination)) {
                             bestDestination = destination;    // Stop the search and move the card to the base.
                             return true;
                         }
                         if (bestDestination < 0) {
                             bestDestination = destination;
                         } else {
-                            if (game.numberOfCardsAt(destination) > game.numberOfCardsAt(bestDestination)) {
+                            const A = this.numberOfCardsAt(bestDestination);
+                            const B = this.numberOfCardsAt(destination);
+                            if (B > A) {
                                 bestDestination = destination;    // Move the card to the longest pile. It's usually the best choice ;-).
+                            } else if (B === A) {
+                                if ((this.isPile(source) && this.isCell(destination)) ||
+                                    (this.isCell(source) && this.isPile(destination))) {
+                                    bestDestination = destination;
+                                }
                             }
                         }
                     }
@@ -322,6 +329,23 @@ section {
             element.onclick = null;
             element.ondblclick = null;
         }
+
+        game.updateAutoButton = function (button) {
+            button.removeAttribute('title');
+            button.setAttribute('disabled', 'disabled');
+            let count = 0;
+            this.forEachMove(function (source, destination) {
+                if (this.isBase(destination)) {
+                    count++;
+                    //return true;
+                }
+            });
+            if (count > 0) {
+                const s = (count > 1 ? 's' : '');
+                button.setAttribute('title', count + ' card' + s + ' can be moved to the base' + s);
+                button.removeAttribute('disabled');
+            }
+        };
 
         game.ondeal = function (deck) {
             // reset selection and history
@@ -355,13 +379,7 @@ section {
                 }
             }
 
-            m_auto.setAttribute('disabled', 'disabled');
-            game.forEachMove(function (source, destination) {
-                if (game.isBase(destination)) {
-                    m_auto.removeAttribute('disabled');
-                    return true;
-                }
-            });
+            this.updateAutoButton(m_auto);
         };
         game.onmove = function (card, src, dst) {
             selector.unselect(); // remove selection if any.
@@ -387,9 +405,11 @@ section {
 
             const element = cards[card];
             // zIndex update.
+            const zIndex = parseInt(element.style.zIndex);
             cards.forEach(function(item, index) {
-                if (item.style.zIndex > element.style.zIndex) {
-                    item.style.zIndex = item.style.zIndex - 1;
+                const zIndexItem = parseInt(item.style.zIndex);
+                if (zIndexItem > zIndex) {
+                    item.style.zIndex = zIndexItem - 1;
                 }
             });
             element.style.zIndex = cards.length;
@@ -412,13 +432,7 @@ section {
             // Enable the placeholder or the previous card in the pile.
             addPlayable(srcCards == 0 ? placeholders[src] : cards[game.cardAt(src, srcCards - 1)], src);
 
-            m_auto.setAttribute('disabled', 'disabled');
-            game.forEachMove(function (source, destination) {
-                if (game.isBase(destination)) {
-                    m_auto.removeAttribute('disabled');
-                    return true;
-                }
-            });
+            this.updateAutoButton(m_auto);
         };
 
         m_deal.onclick = function () {
@@ -428,6 +442,7 @@ section {
         m_auto.onclick = function onclick() {
             game.forEachMove(function (source, destination) {
                 if (game.isBase(destination)) {
+                    // Move one card at a time.
                     game.moveCard(source, destination);
                     setTimeout(onclick, 250);
                     return true;
