@@ -66,7 +66,8 @@ function newGame(pileNum, cellNum, baseNum) {
     function forEachMove(callback) {
         for (let i = 0; i < moves.length; i++) {
             const m = moves[i];
-            if (callback(source(m), destination(m))) {
+            // Call callback with the current context. Break out of the loop if it returns true.
+            if (callback.call(this, source(m), destination(m))) {
                 break;
             }
         }
