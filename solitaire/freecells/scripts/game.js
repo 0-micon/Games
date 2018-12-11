@@ -1,4 +1,3 @@
-
 function newGame(pileNum, cellNum, baseNum) {
     const RANK_NUM = Cards.RANK_NUM;
     const SUIT_NUM = Cards.SUIT_NUM;
@@ -32,6 +31,9 @@ function newGame(pileNum, cellNum, baseNum) {
     }
 
     function cardAt(pile, index) {
+        if (index < 0) {
+            index = desk[pile].length + index;
+        }
         return desk[pile][index];
     }
 
@@ -68,6 +70,16 @@ function newGame(pileNum, cellNum, baseNum) {
             const m = moves[i];
             // Call callback with the current context. Break out of the loop if it returns true.
             if (callback.call(this, source(m), destination(m))) {
+                break;
+            }
+        }
+    }
+
+    function forEachLocus(callback) {
+        for (let i = 0; i < DESK_SIZE; i++) {
+            const length = desk[i].length;
+            // Call callback with the current context. Break out of the loop if it returns true.
+            if (callback.call(this, i, length > 0 ? desk[i][length - 1] : -1)) {
                 break;
             }
         }
@@ -145,6 +157,48 @@ function newGame(pileNum, cellNum, baseNum) {
         return desk[pile].length;
     }
 
+    function isTableau(cardA, cardB) {
+        return Cards.rank(cardA) == ((Cards.rank(cardB) + 1) % RANK_NUM)
+            && (Cards.suit(cardA) & 1) != (Cards.suit(cardB) & 1);
+    }
+
+    function tableauLengthAt(pile) {
+        const cascade = desk[pile];
+        const length = cascade.length;
+        for (let i = length; i-- > 1;) {
+            const c1 = cascade[i];
+            const s1 = c1 % SUIT_NUM;
+            const r1 = (c1 - s1) / SUIT_NUM;
+
+            const c2 = cascade[i - 1];
+            const s2 = c2 % SUIT_NUM;
+            const r2 = (c2 - s2) / SUIT_NUM;
+
+            if (!(r2 == ((r1 + 1) % RANK_NUM) && (s2 & 1) != (s1 & 1))) {
+                return length - i;
+            }
+        }
+
+        return length;
+    }
+
+    function buildTableauFrom(card) {
+        const tableau = [];
+        tableau.push(card);
+        for (let i = PILE_START; i < PILE_END; i++) {
+            const pile = desk[i];
+            let j = pile.indexOf(card);
+            if (j >= 0) {
+                while (++j < pile.length && isTableau(card, pile[j])) {
+                    card = pile[j];
+                    tableau.push(card);
+                }
+                break;
+            }
+        }
+        return tableau;
+    }
+
     return {
         // Constants:
         RANK_NUM: RANK_NUM,
@@ -174,6 +228,9 @@ function newGame(pileNum, cellNum, baseNum) {
         moveCard: moveCard,
         numberOfCardsAt: numberOfCardsAt,
         cardAt: cardAt,
+        tableauLengthAt: tableauLengthAt,
+        buildTableauFrom: buildTableauFrom,
+        forEachLocus: forEachLocus,
 
         isMoveValid: isMoveValid,
         forEachMove: forEachMove
