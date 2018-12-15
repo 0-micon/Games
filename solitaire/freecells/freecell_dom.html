@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title></title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" type="text/css" href="css/freecell_dom.css" />
+</head>
+<body>
+    <section id="m_game">
+    </section>
+    <button id="m_deal">Deal</button>
+    <button id="m_auto" disabled>Auto</button>
+    <button id="m_undo" disabled>Undo</button>
+    <button id="m_redo" disabled>Redo</button>
+    <ol id="m_history">History:</ol>
+
+    <script src="Scripts/utils.js"></script>
+    <script src="Scripts/cards.js"></script>
+    <script src="Scripts/freecell_basis.js"></script>
+    <script src="Scripts/freecell_manager.js"></script>
+    <script src="Scripts/freecell_game_dom.js"></script>
+
+    <script>
+        const freecell = createFreecellGameDOM(8, 4, 4, m_game);
+
+        m_deal.onclick = function () {
+            freecell.deal(Math.floor(Math.random() * 0x80000000));
+        }
+    </script>
+</body>
+</html>
