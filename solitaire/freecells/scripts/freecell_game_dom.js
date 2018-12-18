@@ -46,6 +46,15 @@ const createFreecellGameDOM = (function () {
         };
     }
 
+    function positionElement(element, x, y, cx, cy, units) {
+        const style = element.style;
+
+        style.top = x + units;
+        style.left = y + units;
+        style.width = cx + units;
+        style.height = cy + units;
+    }
+
     function createCards(parent, number, x, y, cx, cy, units) {
         const cards = new Array(number);
         for (let i = 0; i < number; i++) {
@@ -54,13 +63,10 @@ const createFreecellGameDOM = (function () {
             element.id = 'm_card_' + i;
             element.innerHTML = Cards.rankPlayNameOf(i) + Cards.suitHTMLCodeOf(i);
             element.style.position = 'absolute';
-            element.style.left = x;
-            element.style.top = y;
-            element.style.width = cx + units;
-            element.style.height = cy + units;
+            positionElement(element, x, y, cx, cy, units);
 
             parent.appendChild(element);
-            cards[i] = { element: element };
+            cards[i] = { element: element, line: -1, index: -1 };
         }
         return cards;
     }
@@ -90,10 +96,7 @@ const createFreecellGameDOM = (function () {
 
         // Style the parent:
         parent.style.position = "relative";
-        parent.style.top = 0;
-        parent.style.left = 0;
-        parent.style.width = PLAY_CX + UNITS;
-        parent.style.height = PLAY_CY + UNITS;
+        positionElement(parent, 0, 0, PLAY_CX, PLAY_CY, UNITS);
 
         // Create and position placeholders:
         const placeholders = createPlaceholders(parent, game.DESK_SIZE, CX, CY, UNITS);
@@ -106,46 +109,289 @@ const createFreecellGameDOM = (function () {
 
         // Create cards:
         const cards = createCards(parent, game.CARD_NUM, 0, 0, CX, CY, UNITS);
+        cards.forEach(function (card, index) {
+            card.element.ondblclick = function (event) {
+                event.preventDefault();
+            };
+            card.element.onclick = function (event) {
+                event.preventDefault();
+                console.log('Card ' + Cards.playNameOf(index) + ' has been clicked at [' + card.line + ':' + card.index + ']');
+
+                if (card.line < 0 || card.index < 0) {
+                    return;
+                }
+
+                const result = game.findBestPath(card.line);
+                if (result.count === 1) {
+                    moveCard(card.line, result.destination);
+                } else if (result.count > 1) {
+                    console.log(result.path);
+                    console.log(result.destination);
+
+                    result.path.forEach(function (move) {
+                        moveCard(game.toSource(move), game.toDestination(move));
+                    });
+                }
+            };
+            card.updatePosition = function () {
+                const i = this.line;
+                const style = this.element.style;
+
+                style.left = placeholders[i].style.left;
+                if (game.isPile(i)) {
+                    style.top = parseFloat(placeholders[i].style.top) + this.index * DY + UNITS;
+                } else {
+                    style.top = placeholders[i].style.top;
+                }
+            };
+        });
 
         function deal(number) {
             const deck = game.deal(number);
             for (let i = 0; i < game.CARD_NUM; i++) {
                 const element = cards[deck[i]].element;
                 element.style.zIndex = i;
-                //removePlayable(element);
             }
 
             for (let i = 0; i < game.DESK_SIZE; i++) {
                 const count = game.numberOfCardsAt(i);
                 if (count > 0) {
-                    //removePlayable(placeholders[i]);
-                    //addPlayable(game.cardElementAt(i, count - 1), i);
-
                     for (let j = 0; j < count; j++) {
                         const card = cards[game.cardAt(i, j)];
-                        card.pile = i;
+                        card.line = i;
                         card.index = j;
-
-                        const element = card.element;
-                        if (game.isPile(i)) {
-                            element.style.left = placeholders[i].style.left;
-                            element.style.top = parseFloat(placeholders[i].style.top) + j * DY + UNITS;
-                        } else {
-                            element.style.left = placeholders[i].style.left;
-                            element.style.top = placeholders[i].style.top;
-                        }
+                        card.updatePosition();
                     }
-                } else {
-                    //addPlayable(placeholders[i], i);
                 }
+            }
+
+            if (deal.notify) {
+                deal.notify(deck);
             }
 
             return deck;
         }
 
+        function moveCard(source, destination) {
+            game.moveCard(source, destination);
+
+            const card = cards[game.cardAt(destination, -1)];
+            card.line = destination;
+            card.index = game.numberOfCardsAt(destination) - 1;
+
+            const element = card.element;
+            // zIndex update.
+            const zIndex = parseInt(element.style.zIndex);
+            cards.forEach(function (item, index) {
+                const zIndexItem = parseInt(item.element.style.zIndex);
+                if (zIndexItem > zIndex) {
+                    item.element.style.zIndex = zIndexItem - 1;
+                }
+            });
+            element.style.zIndex = game.CARD_NUM;
+
+            card.updatePosition();
+
+            if (moveCard.notify) {
+                moveCard.notify(source, destination);
+            }
+        }
+
         return Object.setPrototypeOf({
             // Overrides:
             deal: deal,
+            moveCard: moveCard,
         }, game);
+    }
+})();
+
+const createFreecellGame = (function () {
+    function createFreecellHistory(parent, undo, redo) {
+        const history = newHistory();
+        const historySelector = newSingleElementSelector('selected');
+
+        history.onclear = function () {
+            historySelector.clear();
+            if (parent) {
+                parent.innerHTML = '';
+            }
+
+            if (undo) {
+                undo.setAttribute('disabled', 'disabled');
+            }
+            if (redo) {
+                redo.setAttribute('disabled', 'disabled');
+            }
+        };
+
+        history.onadd = function () {
+            if (undo) {
+                undo.removeAttribute('disabled');
+            }
+
+            const index = history.current;
+            //const item = history.currentItem;
+            const li = document.createElement('li');
+
+            li.innerHTML = history.itemToHTML();
+            li.onclick = function () {
+                history.onclickitem(index);
+            };
+
+            if (parent) {
+                const children = parent.querySelectorAll('li');
+                for (let i = children.length; i >= history.length; i--) {
+                    parent.removeChild(children[i - 1]);
+                }
+                parent.appendChild(li);
+            }
+
+            historySelector.select(li, history.current);
+        };
+
+        history.onmove = function () {
+            if (parent) {
+                const children = parent.querySelectorAll('li');
+                historySelector.select(children[history.current], history.current);
+            }
+
+            if (undo) {
+                if (history.current >= 0) {
+                    undo.removeAttribute('disabled');
+                } else {
+                    undo.setAttribute('disabled', 'disabled');
+                }
+            }
+
+            if (redo) {
+                if (history.total > history.length) {
+                    redo.removeAttribute('disabled');
+                } else {
+                    redo.setAttribute('disabled', 'disabled');
+                }
+            }
+        };
+
+        history.moveCard = function (card, source, destination) {
+            let historyUpdated = false;
+            if (history.length > 0) {
+                const item = history.currentItem;
+                if (item.card == card && item.from == destination && item.to == source) {
+                    history.moveBackward();
+                    historyUpdated = true;
+                }
+            }
+            if (!historyUpdated && history.total > history.length) {
+                const item = history.forwardItem;
+                if (item.card == card && item.from == source && item.to == destination) {
+                    history.moveForward();
+                    historyUpdated = true;
+                }
+            }
+            if (!historyUpdated) {
+                history.add({ card: card, from: source, to: destination });
+            }
+        }
+
+        return history;
+    }
+
+    return function (pileNum, cellNum, baseNum, gui) {
+        // Base object
+        const game = createFreecellGameDOM(pileNum, cellNum, baseNum, gui.parent);
+
+        // History object
+        const history = createFreecellHistory(gui.history, gui.undo, gui.redo);
+
+        history.itemToHTML = function () {
+            const index = history.current;
+            const item = history.currentItem;
+            const li = document.createElement('li');
+            let from = to = '-1';
+            if (game.isPile(item.to)) {
+                to = 'pile ' + (item.to - game.PILE_START);
+            }
+            if (game.isPile(item.from)) {
+                from = 'pile ' + (item.from - game.PILE_START);
+            }
+            if (game.isBase(item.to)) {
+                to = 'base ' + (item.to - game.BASE_START);
+            }
+            if (game.isBase(item.from)) {
+                from = 'base ' + (item.from - game.BASE_START);
+            }
+            if (game.isCell(item.to)) {
+                to = 'cell ' + (item.to - game.CELL_START);
+            }
+            if (game.isCell(item.from)) {
+                from = 'cell ' + (item.from - game.CELL_START);
+            }
+
+            return '<span class="' + Cards.suitFullNameOf(item.card) + '">' + Cards.playNameOf(item.card) + '</span>'
+                + ': ' + from + '&rarr;' + to;
+        };
+
+        history.onclickitem = function (index) {
+            // move forward
+            while (history.current < index) {
+                const next = history.forwardItem;
+                game.moveCard(next.from, next.to);
+            }
+
+            // move backward
+            while (history.current > index) {
+                const prev = history.currentItem;
+                game.moveCard(prev.to, prev.from);
+            }
+        };
+
+        if (gui.undo) {
+            gui.undo.onclick = function () {
+                if (history.current >= 0) {
+                    const item = history.currentItem;
+                    game.moveCard(item.to, item.from);
+                }
+            };
+        }
+        
+        if (gui.redo) {
+            gui.redo.onclick = function () {
+                if (history.total > history.length) {
+                    const next = history.forwardItem;
+                    game.moveCard(next.from, next.to);
+                }
+            };
+        }
+
+        if (gui.deal) {
+            gui.deal.onclick = function () {
+                game.deal(Math.floor(Math.random() * 0x80000000));
+            };
+        }
+
+        if (gui.auto) {
+            gui.auto.onclick = function onclick() {
+                game.forEachMove(function (source, destination) {
+                    console.log('Source: ' + source + ' Destination: ' + destination);
+                    if (game.isBase(destination)) {
+                        // Move one card at a time.
+                        game.moveCard(source, destination);
+                        setTimeout(onclick, 250);
+                        return true;    // Skip other moves.
+                    }
+                });
+            };
+        }
+
+        // Game overrides:
+        game.deal.notify = function (number) {
+            history.clear();
+        };
+
+        game.moveCard.notify = function (source, destination) {
+            history.moveCard(game.cardAt(destination, -1), source, destination);
+        };
+
+        return game;
     }
 })();
