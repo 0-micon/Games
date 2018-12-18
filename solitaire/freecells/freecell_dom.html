@@ -9,7 +9,7 @@
     <section id="m_game">
     </section>
     <button id="m_deal">Deal</button>
-    <button id="m_auto" disabled>Auto</button>
+    <button id="m_auto">Auto</button>
     <button id="m_undo" disabled>Undo</button>
     <button id="m_redo" disabled>Redo</button>
     <ol id="m_history">History:</ol>
@@ -21,11 +21,15 @@
     <script src="Scripts/freecell_game_dom.js"></script>
 
     <script>
-        const freecell = createFreecellGameDOM(8, 4, 4, m_game);
-
-        m_deal.onclick = function () {
-            freecell.deal(Math.floor(Math.random() * 0x80000000));
-        }
+        const freecell = createFreecellGame(8, 4, 4,
+            {
+                parent: m_game,
+                deal: m_deal,
+                auto: m_auto,
+                undo: m_undo,
+                redo: m_redo,
+                history: m_history
+            });
     </script>
 </body>
 </html>
