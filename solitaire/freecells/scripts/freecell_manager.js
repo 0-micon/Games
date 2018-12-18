@@ -37,9 +37,194 @@ function createFreecellManager(pileNum, cellNum, baseNum) {
         desk.moveCard(source, destination);
         getMoves();
 
-        if (this.onmove) {
-            this.onmove(desk.cardAt(destination, -1), source, destination);
+        //if (this.onmove) {
+        //    this.onmove(desk.cardAt(destination, -1), source, destination);
+        //}
+    }
+
+    function findBestPath(from) {
+        const result = { count: 0 };
+        const lastCard = desk.cardAt(from, -1);
+
+        // Handle simple cases first.
+        if (!basis.isBase(from)) {
+            const lastCardSuit = Cards.suit(lastCard);
+            const lastCardRank = Cards.rank(lastCard);
+            // Can move to a base or a pile.
+            for (let i = basis.BASE_START; i < basis.BASE_END; i++) {
+                if (i - basis.BASE_START === lastCardSuit && desk.numberOfCardsAt(i) === lastCardRank) {
+                    // Move this card to the foundation.
+                    return { count: 1, destination: i };
+                }
+            }
         }
+
+        if (basis.isCell(from)) {
+            const lastCardSuit = Cards.suit(lastCard);
+            const lastCardRank = Cards.rank(lastCard);
+            // Can move to a base or a pile.
+            for (let i = basis.BASE_START; i < basis.BASE_END; i++) {
+                if (i - basis.BASE_START === lastCardSuit && desk.numberOfCardsAt(i) === lastCardRank) {
+                    // Move this card to the foundation.
+                    return { count: 1, destination: i };
+                }
+            }
+
+            let num = 0;
+            for (let i = basis.PILE_START; i < basis.PILE_END; i++) {
+                const cardNum = desk.numberOfCardsAt(i);
+                if (cardNum === 0) {
+                    if (result.count === 0) {
+                        result.count = 1;
+                        result.destination = i;
+                    }
+                } else {
+                    if (basis.isTableau(desk.cardAt(i, -1), lastCard)) {
+                        if (cardNum > num) {
+                            num = cardNum;
+                            result.count = 1;
+                            result.destination = i;
+                        }
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        if (basis.isBase(from)) {
+            const lastCardSuit = Cards.suit(lastCard);
+            const lastCardRank = Cards.rank(lastCard);
+            let num = 0;
+            for (let i = basis.PILE_START; i < basis.PILE_END; i++) {
+                const cardNum = desk.numberOfCardsAt(i);
+                if (cardNum === 0) {
+                    if (result.count === 0) {
+                        result.count = 1;
+                        result.destination = i;
+                    }
+                } else {
+                    if (basis.isTableau(desk.cardAt(i, -1), lastCard)) {
+                        if (cardNum > num) {
+                            num = cardNum;
+                            result.count = 1;
+                            result.destination = i;
+                        }
+                    }
+                }
+            }
+
+            if (result.count == 0) {
+                for (let i = basis.CELL_START; i < basis.CELL_END; i++) {
+                    if (desk.numberOfCardsAt(i) === 0) {
+                        result.count = 1;
+                        result.destination = i;
+                        break;
+                    }
+                }
+            }
+
+            return result;
+        }
+        
+        const tableau = desk.tableauAt(from);
+        if (tableau.length === 1) {
+            const lastCardSuit = Cards.suit(lastCard);
+            const lastCardRank = Cards.rank(lastCard);
+            for (let i = basis.BASE_START; i < basis.BASE_END; i++) {
+                if (i - basis.BASE_START === lastCardSuit && desk.numberOfCardsAt(i) === lastCardRank) {
+                    // Move this card to the foundation.
+                    return { count: 1, destination: i };
+                }
+            }
+
+            let num = 0;
+            for (let i = basis.PILE_START; i < basis.PILE_END; i++) {
+                if (i === from) {
+                    continue;
+                }
+
+                const cardNum = desk.numberOfCardsAt(i);
+                if (cardNum === 0) {
+                    if (result.count === 0) {
+                        result.count = 1;
+                        result.destination = i;
+                    }
+                } else {
+                    if (basis.isTableau(desk.cardAt(i, -1), lastCard)) {
+                        if (cardNum > num) {
+                            num = cardNum;
+                            result.count = 1;
+                            result.destination = i;
+                        }
+                    }
+                }
+            }
+
+            if (num == 0) {
+                for (let i = basis.CELL_START; i < basis.CELL_END; i++) {
+                    if (desk.numberOfCardsAt(i) === 0) {
+                        result.count = 1;
+                        result.destination = i;
+                        break;
+                    }
+                }
+            }
+
+            return result;
+        }
+        
+
+        const startTime = Date.now();
+
+        function callback(desk, path) {
+            if (Date.now() - startTime > 500) {
+                // It's time to stop the search.
+                console.log('Search timeout!');
+                return true;
+            }
+            for (let i = basis.PILE_START; i < basis.PILE_END; i++) {
+                // 1. Test if the last filtered card has been moved to the destination.
+                if (desk.numberOfCardsAt(i) > 0 && desk.cardAt(i, -1) === lastCard) {
+                    // 2. Count how many cards from the tableau has been moved to the destination.
+                    const count = desk.countEqualsBackward(i, tableau);
+                    if (count === tableau.length) {
+                        result.count = count;
+                        result.path = path;
+                        result.destination = i;
+                        return true;
+                    } else if (count > result.count) {
+                        const delta = tableau.length - count;
+                        // 3. Update result if the rest of the tableau is still intact.
+                        if (desk.numberOfCardsAt(from) >= delta) {
+                            let j = 0;
+                            for (; j < delta && desk.cardAt(from, -j - 1) == tableau[delta - j - 1]; j++);
+                            if (j === delta) {
+                                result.count = count;
+                                result.path = path;
+                                result.destination = i;
+                            }
+                        }
+                    }
+
+                    return false;
+                }
+            }
+        }
+
+        back.from(desk);
+        basis.solve(back, callback, function (card) { return tableau.indexOf(card) >= 0; });
+
+        if (result.count === 0) {
+            for (let i = basis.CELL_START; i < basis.CELL_END; i++) {
+                if (desk.numberOfCardsAt(i) === 0) {
+                    result.count = 1;
+                    result.destination = i;
+                    break;
+                }
+            }
+        }
+        return result;
     }
 
     // Returns how many cards you can move to the destination.
@@ -138,13 +323,16 @@ function createFreecellManager(pileNum, cellNum, baseNum) {
         moveCard: moveCard,
 
         // Methods:
+        findBestPath: findBestPath,
         solveMove: solveMove,
         isMoveValid: isMoveValid,
         forEachMove: forEachMove,
 
         // Some Desk const methods:
+        getMoves: desk.getMoves,
         forEachLocus: desk.forEachLocus,
         buildTableauFrom: desk.buildTableauFrom,
+        tableauAt: desk.tableauAt,
         tableauLengthAt: desk.tableauLengthAt,
         cardAt: desk.cardAt,
         numberOfCardsAt: desk.numberOfCardsAt,
