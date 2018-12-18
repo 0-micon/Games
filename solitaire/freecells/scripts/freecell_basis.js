@@ -49,6 +49,9 @@ function createFreecellBasis(pileNum, cellNum, baseNum) {
     function solve(desk, callback, filter) {
         let srcMoves = [[]], dstMoves = [], tmp;
         const moves = [], done = {};
+
+        done[desk.baseToString() + ':' + desk.pileToString()] = true;
+
         while (srcMoves.length > 0) {
             for (let i = 0, sl = srcMoves.length; i < sl; i++) {
                 const path = srcMoves[i];
@@ -59,8 +62,8 @@ function createFreecellBasis(pileNum, cellNum, baseNum) {
 
                 for (let j = 0, ml = moves.length; j < ml; j++) {
                     const mov = moves[j];
-                    const src = toSource(m);
-                    const dst = toDestination(m);
+                    const src = toSource(mov);
+                    const dst = toDestination(mov);
 
                     desk.moveCard(src, dst);
 
@@ -209,13 +212,15 @@ function createFreecellBasis(pileNum, cellNum, baseNum) {
             }
         }
 
-        function tableauAt(line) {
+        function tableauAt(lineIndex) {
             const tableau = [];
-            let j = desk[line].length;
+            const line = desk[lineIndex];
+
+            let j = line.length;
             if (j > 0) {
-                tableau.push(desk[line][j - 1]);
-                while (--j > 0 && isTableau(desk[line][j - 1], desk[line][j])) {
-                    tableau.push(desk[line][j - 1]);
+                tableau.push(line[j - 1]);
+                while (--j > 0 && isTableau(line[j - 1], line[j])) {
+                    tableau.push(line[j - 1]);
                 }
             }
             tableau.reverse();
