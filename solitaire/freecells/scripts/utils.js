@@ -128,3 +128,50 @@ function newHistory() {
         }
     };
 }
+
+function EventQueue() {
+    const events = {};
+
+    this.getEventQueue = function (eventName) {
+        if (!events[eventName]) {
+            events[eventName] = [];
+        }
+        return events[eventName];
+    };
+}
+
+EventQueue.prototype.addEventListener = function (eventName, callback) {
+    const queue = this.getEventQueue(eventName);
+    let id = 1;
+    for (let isValidId = false; !isValidId; id++) {
+        isValidId = true;
+        for (let i = 0; i < queue.length; i++) {
+            if (queue[i].id === id) {
+                isValidId = false;
+                break;
+            }
+        }
+    }
+    queue.push({ id: id, callback: callback });
+    return id;
+};
+
+EventQueue.prototype.removeEventListener = function (eventName, id) {
+    const queue = this.getEventQueue(eventName);
+    for (let i = queue.length; i-- > 0;) {
+        if (queue[i].id === id) {
+            queue.splice(i, 1);
+            return true;
+        }
+    }
+};
+
+EventQueue.prototype.notifyAll = function (event) {
+    const queue = this.getEventQueue(event.name);
+    // LIFO queue:
+    for (let i = queue.length; i-- > 0;) {
+        if (queue[i].callback(event) || event.stopPropagation) {
+            break;
+        }
+    }
+};
