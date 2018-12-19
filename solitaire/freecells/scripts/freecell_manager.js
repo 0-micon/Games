@@ -4,6 +4,7 @@ function createFreecellManager(pileNum, cellNum, baseNum) {
     const back = basis.createDesk();
 
     const moves = [];
+    const queue = new EventQueue();
 
     function getMoves() {
         moves.length = 0;
@@ -17,19 +18,39 @@ function createFreecellManager(pileNum, cellNum, baseNum) {
     function forEachMove(callback) {
         for (let i = 0; i < moves.length; i++) {
             const m = moves[i];
-            // Call callback with the current context. Break out of the loop if it returns true.
-            if (callback.call(this, basis.toSource(m), basis.toDestination(m))) {
+            // Call callback. Break out of the loop if it returns true.
+            if (callback(basis.toSource(m), basis.toDestination(m))) {
                 break;
             }
         }
     }
 
+    function addOnDealListener(callback) {
+        return queue.addEventListener('deal', callback);
+    }
+
+    function removeOnDealListener(id) {
+        return queue.removeEventListener('deal', id);
+    }
+
+    function addOnMoveListener(callback) {
+        return queue.addEventListener('move', callback);
+    }
+
+    function removeOnMoveListener(id) {
+        return queue.removeEventListener('move', id);
+    }
+
     function deal(number) {
         const cards = desk.deal(number);
         getMoves();
-        //if (this.ondeal) {
-        //    this.ondeal(cards);
-        //}
+        
+        const event = {
+            name: 'deal',
+            deck: cards,
+        };
+        queue.notifyAll(event);
+
         return cards;
     }
 
@@ -37,9 +58,13 @@ function createFreecellManager(pileNum, cellNum, baseNum) {
         desk.moveCard(source, destination);
         getMoves();
 
-        //if (this.onmove) {
-        //    this.onmove(desk.cardAt(destination, -1), source, destination);
-        //}
+        const event = {
+            name: 'move',
+            card: desk.cardAt(destination, -1),
+            source: source,
+            destination: destination
+        };
+        queue.notifyAll(event);
     }
 
     function findBestPath(from) {
@@ -318,11 +343,17 @@ function createFreecellManager(pileNum, cellNum, baseNum) {
     }
 
     return Object.setPrototypeOf({
-        // Overrides:
+        // Desk changing methods:
         deal: deal,
         moveCard: moveCard,
 
-        // Methods:
+        // Listeners:
+        addOnDealListener: addOnDealListener,
+        addOnMoveListener: addOnMoveListener,
+        removeOnDealListener: removeOnDealListener,
+        removeOnMoveListener: removeOnMoveListener,
+
+        // Other methods:
         findBestPath: findBestPath,
         solveMove: solveMove,
         isMoveValid: isMoveValid,
