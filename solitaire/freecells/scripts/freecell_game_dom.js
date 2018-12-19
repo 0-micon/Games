@@ -123,13 +123,13 @@ const createFreecellGameDOM = (function () {
 
                 const result = game.findBestPath(card.line);
                 if (result.count === 1) {
-                    moveCard(card.line, result.destination);
+                    game.moveCard(card.line, result.destination);
                 } else if (result.count > 1) {
                     console.log(result.path);
                     console.log(result.destination);
 
                     result.path.forEach(function (move) {
-                        moveCard(game.toSource(move), game.toDestination(move));
+                        game.moveCard(game.toSource(move), game.toDestination(move));
                     });
                 }
             };
@@ -146,8 +146,8 @@ const createFreecellGameDOM = (function () {
             };
         });
 
-        function deal(number) {
-            const deck = game.deal(number);
+        game.addOnDealListener(function deal(event) {
+            const deck = event.deck;
             for (let i = 0; i < game.CARD_NUM; i++) {
                 const element = cards[deck[i]].element;
                 element.style.zIndex = i;
@@ -164,20 +164,12 @@ const createFreecellGameDOM = (function () {
                     }
                 }
             }
+        });
 
-            if (deal.notify) {
-                deal.notify(deck);
-            }
-
-            return deck;
-        }
-
-        function moveCard(source, destination) {
-            game.moveCard(source, destination);
-
-            const card = cards[game.cardAt(destination, -1)];
-            card.line = destination;
-            card.index = game.numberOfCardsAt(destination) - 1;
+        game.addOnMoveListener(function (event) {
+            const card = cards[event.card];
+            card.line = event.destination;
+            card.index = game.numberOfCardsAt(event.destination) - 1;
 
             const element = card.element;
             // zIndex update.
@@ -191,22 +183,14 @@ const createFreecellGameDOM = (function () {
             element.style.zIndex = game.CARD_NUM;
 
             card.updatePosition();
+        })
 
-            if (moveCard.notify) {
-                moveCard.notify(source, destination);
-            }
-        }
-
-        return Object.setPrototypeOf({
-            // Overrides:
-            deal: deal,
-            moveCard: moveCard,
-        }, game);
+        return game;
     }
 })();
 
 const createFreecellGame = (function () {
-    function createFreecellHistory(parent, undo, redo) {
+    function createFreecellHistory(parent) {
         const history = newHistory();
         const historySelector = newSingleElementSelector('selected');
 
@@ -215,20 +199,9 @@ const createFreecellGame = (function () {
             if (parent) {
                 parent.innerHTML = '';
             }
-
-            if (undo) {
-                undo.setAttribute('disabled', 'disabled');
-            }
-            if (redo) {
-                redo.setAttribute('disabled', 'disabled');
-            }
         };
 
         history.onadd = function () {
-            if (undo) {
-                undo.removeAttribute('disabled');
-            }
-
             const index = history.current;
             //const item = history.currentItem;
             const li = document.createElement('li');
@@ -253,22 +226,6 @@ const createFreecellGame = (function () {
             if (parent) {
                 const children = parent.querySelectorAll('li');
                 historySelector.select(children[history.current], history.current);
-            }
-
-            if (undo) {
-                if (history.current >= 0) {
-                    undo.removeAttribute('disabled');
-                } else {
-                    undo.setAttribute('disabled', 'disabled');
-                }
-            }
-
-            if (redo) {
-                if (history.total > history.length) {
-                    redo.removeAttribute('disabled');
-                } else {
-                    redo.setAttribute('disabled', 'disabled');
-                }
             }
         };
 
@@ -301,7 +258,7 @@ const createFreecellGame = (function () {
         const game = createFreecellGameDOM(pileNum, cellNum, baseNum, gui.parent);
 
         // History object
-        const history = createFreecellHistory(gui.history, gui.undo, gui.redo);
+        const history = createFreecellHistory(gui.history);
 
         history.itemToHTML = function () {
             const index = history.current;
@@ -383,14 +340,45 @@ const createFreecellGame = (function () {
             };
         }
 
-        // Game overrides:
-        game.deal.notify = function (number) {
-            history.clear();
-        };
+        function updateButtons() {
+            if (gui.auto) {
+                gui.auto.setAttribute('disabled', 'disabled');
+                let count = 0;
+                game.forEachMove(function (source, destination) {
+                    if (game.isBase(destination)) {
+                        gui.auto.removeAttribute('disabled');
+                        return true;
+                    }
+                });
+            }
 
-        game.moveCard.notify = function (source, destination) {
-            history.moveCard(game.cardAt(destination, -1), source, destination);
-        };
+            if (gui.undo) {
+                if (history.current >= 0) {
+                    gui.undo.removeAttribute('disabled');
+                } else {
+                    gui.undo.setAttribute('disabled', 'disabled');
+                }
+            }
+
+            if (gui.redo) {
+                if (history.total > history.length) {
+                    gui.redo.removeAttribute('disabled');
+                } else {
+                    gui.redo.setAttribute('disabled', 'disabled');
+                }
+            }
+        }
+
+        // Game listeners:
+        game.addOnDealListener(function (event) {
+            history.clear();
+            updateButtons();
+        });
+
+        game.addOnMoveListener(function (event) {
+            history.moveCard(event.card, event.source, event.destination);
+            updateButtons();
+        });
 
         return game;
     }
