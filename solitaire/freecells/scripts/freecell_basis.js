@@ -135,8 +135,8 @@ function createFreecellBasis(pileNum, cellNum, baseNum) {
             for (let i = 0; i < DESK_SIZE; i++) {
                 const line = desk[i];
                 const length = line.length;
-                // Call callback with the current context. Break out of the loop if it returns true.
-                if (callback.call(this, i, length > 0 ? line[length - 1] : -1)) {
+                // Call callback. Break out of the loop if it returns true.
+                if (callback(i, length > 0 ? line[length - 1] : -1)) {
                     break;
                 }
             }
